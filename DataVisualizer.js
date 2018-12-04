@@ -8,7 +8,7 @@ class DataVisualizer {
 
     }
 
-    init() {
+    async init() {
         this.scene = new THREE.Scene();
 
         // camera
@@ -24,24 +24,67 @@ class DataVisualizer {
         document.body.appendChild(this.renderer.domElement);
 
         this.setupLights();
-
-        const material = new THREE.MeshPhongMaterial();
-
-        for(let i = 0; i<10; i++){
-            const cubeGeometry = new THREE.CubeGeometry(10, 10, 10);
-            const cube = new THREE.Mesh(cubeGeometry, material);
-            cube.applyMatrix(new THREE.Matrix4().makeTranslation());
-            this.scene.add(cube);
+        function threshold(value, thresholdValue = 0.2){
+            return (value < thresholdValue) ? undefined:value;
         }
 
-        const cubeGeometry = new THREE.CubeGeometry(10, 10, 10);
-        const cube = new THREE.Mesh(cubeGeometry, material);
+        const imageData = await getImageData(this.dataMapUrl, 0.2);
+        const data = imageData.map(row =>row.map(
+            ([r,g,b,a]) => threshold(1-r/255)
+        ));
+
+        //arary of rows of values
+        const dataWidth = data.length;
+        const dataHeight = data[0] ? data[0].length : 0;
+
+        const materials = DataVisualizer.createMaterialPalette(10);
+        const mergedGeometry = new THREE.Geometry();
+        for(let i = 0; i < data.length; i++){
+            const row = data[i];
+            for(let j = 0; row.length > j; j++){
+                const value = row[j];
+                const cubeGeometry = new THREE.CubeGeometry(1, 1, 1);
+                const cube = new THREE.Mesh(cubeGeometry);
+                cube.applyMatrix(new THREE.Matrix4().makeTranslation(
+                    i - dataWidth/2,
+                    0.5,
+                    j-dataHeight/2
+                ));
+                let k = 0;
+                cubeGeometry.faces.forEach(face=>{
+                    face.materialIndex = Math.round((1-value)*(materials.length-1));
+                    k++;
+                });
+                const y = value * this.dataDepth;
+                cube.applyMatrix(new THREE.Matrix4().makeScale(1,y,1));
+                mergedGeometry.merge(cubeGeometry, cube.matrix, 0);
+            }
+        }
+
+
+        const mergedMesh = new THREE.Mesh(mergedGeometry, materials);
+        this.scene.add(mergedMesh);
+
+
+        const cubeGeometry = new THREE.CubeGeometry(1, 1, 1);
+        const cube = new THREE.Mesh(cubeGeometry, materials);
 
         this.scene.add(cube);
 
         this.control = new THREE.OrbitControls(this.camera, this.renderer.domElement);
 
         this.animate();
+    }
+
+    static createMaterialPalette(count){
+        const materials = [];
+        for(let i =0; i<count; i++){
+            const material = new THREE.MeshPhongMaterial();
+            const colorComponent = Math.round(i/count*255);
+            material.color = new THREE.Color(`rgb(255, ${colorComponent}, 0)`)
+            materials.push(material);
+        }
+        return materials;
     }
 
     setupLights() {
